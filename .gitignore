@@ -11,6 +11,7 @@
 !api
 
 # ignore
+.vscode
 .idea
 **/.DS_Store
 **/logs
