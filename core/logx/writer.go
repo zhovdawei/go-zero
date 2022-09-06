@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"path"
 	"strings"
 	"sync"
 	"sync/atomic"
 
+	fatihcolor "github.com/fatih/color"
 	"github.com/zeromicro/go-zero/core/color"
 )
 
@@ -67,6 +67,17 @@ func (w *atomicWriter) Store(v Writer) {
 	w.writer = v
 }
 
+func (w *atomicWriter) StoreIfNil(v Writer) Writer {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	if w.writer == nil {
+		w.writer = v
+	}
+
+	return w.writer
+}
+
 func (w *atomicWriter) Swap(v Writer) Writer {
 	w.lock.Lock()
 	defer w.lock.Unlock()
@@ -76,8 +87,8 @@ func (w *atomicWriter) Swap(v Writer) Writer {
 }
 
 func newConsoleWriter() Writer {
-	outLog := newLogWriter(log.New(os.Stdout, "", flags))
-	errLog := newLogWriter(log.New(os.Stderr, "", flags))
+	outLog := newLogWriter(log.New(fatihcolor.Output, "", flags))
+	errLog := newLogWriter(log.New(fatihcolor.Error, "", flags))
 	return &concreteWriter{
 		infoLog:   outLog,
 		errorLog:  errLog,
@@ -307,29 +318,7 @@ func writePlainAny(writer io.Writer, level string, val interface{}, fields ...st
 	case fmt.Stringer:
 		writePlainText(writer, level, v.String(), fields...)
 	default:
-		var buf strings.Builder
-		buf.WriteString(getTimestamp())
-		buf.WriteByte(plainEncodingSep)
-		buf.WriteString(level)
-		buf.WriteByte(plainEncodingSep)
-		if err := json.NewEncoder(&buf).Encode(val); err != nil {
-			log.Println(err.Error())
-			return
-		}
-
-		for _, item := range fields {
-			buf.WriteByte(plainEncodingSep)
-			buf.WriteString(item)
-		}
-		buf.WriteByte('\n')
-		if writer == nil {
-			log.Println(buf.String())
-			return
-		}
-
-		if _, err := fmt.Fprint(writer, buf.String()); err != nil {
-			log.Println(err.Error())
-		}
+		writePlainValue(writer, level, v, fields...)
 	}
 }
 
@@ -340,6 +329,32 @@ func writePlainText(writer io.Writer, level, msg string, fields ...string) {
 	buf.WriteString(level)
 	buf.WriteByte(plainEncodingSep)
 	buf.WriteString(msg)
+	for _, item := range fields {
+		buf.WriteByte(plainEncodingSep)
+		buf.WriteString(item)
+	}
+	buf.WriteByte('\n')
+	if writer == nil {
+		log.Println(buf.String())
+		return
+	}
+
+	if _, err := fmt.Fprint(writer, buf.String()); err != nil {
+		log.Println(err.Error())
+	}
+}
+
+func writePlainValue(writer io.Writer, level string, val interface{}, fields ...string) {
+	var buf strings.Builder
+	buf.WriteString(getTimestamp())
+	buf.WriteByte(plainEncodingSep)
+	buf.WriteString(level)
+	buf.WriteByte(plainEncodingSep)
+	if err := json.NewEncoder(&buf).Encode(val); err != nil {
+		log.Println(err.Error())
+		return
+	}
+
 	for _, item := range fields {
 		buf.WriteByte(plainEncodingSep)
 		buf.WriteString(item)
